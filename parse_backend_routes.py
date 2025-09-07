@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-import argparse
-import sys
 import os
 import re
 
@@ -58,39 +56,17 @@ def parse_backend_routes(directory):
     
     return unique_routes
 
-def main():
-    # Set up argument parser
-    parser = argparse.ArgumentParser(
-        description="Route-Linter: A tool to analyze source code directories"
-    )
+# Example usage
+if __name__ == "__main__":
+    import sys
     
-    # Add required arguments
-    parser.add_argument(
-        "--backend", 
-        required=True,
-        help="Path to the backend directory"
-    )
-    parser.add_argument(
-        "--frontend", 
-        required=True,
-        help="Path to the frontend directory"
-    )
+    if len(sys.argv) != 2:
+        print("Usage: python parse_backend_routes.py <backend_directory>")
+        sys.exit(1)
     
-    # Parse arguments
-    args = parser.parse_args()
+    backend_dir = sys.argv[1]
+    routes = parse_backend_routes(backend_dir)
     
-    # Parse backend routes
-    routes = parse_backend_routes(args.backend)
-    
-    # Print the paths received and the routes found
-    print(f"Backend path: {args.backend}")
-    print(f"Frontend path: {args.frontend}")
-    print(f"\nFound {len(routes)} unique API routes:")
+    print(f"Found {len(routes)} unique API routes:")
     for route in sorted(routes):
         print(f"  {route}")
-    
-    # Exit successfully
-    return 0
-
-if __name__ == "__main__":
-    sys.exit(main())
