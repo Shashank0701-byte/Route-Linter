@@ -1,62 +1,7 @@
 #!/usr/bin/env python3
 
-import argparse
-import sys
 import os
 import re
-
-def parse_backend_routes(directory):
-    """
-    Parse Express.js backend routes from JavaScript files in the given directory.
-    
-    Args:
-        directory (str): Path to the backend directory
-        
-    Returns:
-        set: A set of unique route strings in the format 'METHOD /path/to/route'
-    """
-    routes = set()
-    
-    # Regex pattern to match Express.js route definitions
-    # This pattern matches common Express route patterns like:
-    # app.get('/path', ...), router.post('/api/users', ...), etc.
-    # Captures the HTTP method and the route path
-    route_pattern = re.compile(
-        r'(?:app|router|\w+Router)\.(get|post|put|delete|patch)\s*\(\s*[\'"](.*?)[\'"](\s*,|\))',
-        re.IGNORECASE
-    )
-    
-    # Walk through all files in the directory recursively
-    for root, _, files in os.walk(directory):
-        for file in files:
-            # Only process JavaScript files
-            if file.endswith('.js'):
-                file_path = os.path.join(root, file)
-                try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                        
-                        # Find all route definitions in the file
-                        for match in route_pattern.finditer(content):
-                            method = match.group(1).upper()  # HTTP method (GET, POST, etc.)
-                            path = match.group(2)           # Route path (/api/users, etc.)
-                            
-                            # Add the route to the set in the format 'METHOD /path'
-                            routes.add(f'{method} {path}')
-                except Exception as e:
-                    print(f"Error reading file {file_path}: {e}")
-    
-    # Filter out any potential duplicates that might have different formatting
-    # This is a safeguard in case the regex captures the same route multiple times
-    unique_routes = set()
-    for route in routes:
-        # Normalize the route by removing extra spaces and standardizing format
-        parts = route.split(' ', 1)
-        if len(parts) == 2:
-            method, path = parts
-            unique_routes.add(f"{method} {path}")
-    
-    return unique_routes
 
 def parse_frontend_calls(directory):
     """
@@ -186,6 +131,12 @@ def is_api_path(path):
         r'^/graphql',
         # REST-like endpoints
         r'^/v\d+/',  # Version prefixes like /v1/, /v2/
+        # Exclude common non-API paths
+        # r'^/static/',
+        # r'^/assets/',
+        # r'^/images/',
+        # r'^/css/',
+        # r'^/js/'
     ]
     
     # Check if the path matches any of the API patterns
@@ -203,75 +154,17 @@ def is_api_path(path):
     
     return False
 
-def find_route_mismatches(backend_routes, frontend_calls):
-    """
-    Find mismatches between backend routes and frontend API calls.
-    
-    Args:
-        backend_routes (set): Set of backend routes in the format 'METHOD /path'
-        frontend_calls (list): List of dictionaries with frontend API calls
-        
-    Returns:
-        tuple: (unused_routes, undefined_routes)
-            - unused_routes: Backend routes not used in the frontend
-            - undefined_routes: Frontend API calls with no matching backend route
-    """
-    # Extract method and path from frontend calls
-    frontend_routes = set()
-    for call in frontend_calls:
-        # Normalize the path by removing template literals
-        path = re.sub(r'\${[^}]*}', ':param', call['path'])
-        frontend_routes.add(f"{call['method']} {path}")
-    
-    # Find routes defined in backend but not used in frontend
-    unused_routes = backend_routes - frontend_routes
-    
-    # Find routes used in frontend but not defined in backend
-    undefined_routes = frontend_routes - backend_routes
-    
-    return unused_routes, undefined_routes
-
-def main():
-    parser = argparse.ArgumentParser(description='Route Linter - Analyze backend and frontend routes')
-    parser.add_argument('--backend', required=True, help='Path to the backend directory')
-    parser.add_argument('--frontend', required=True, help='Path to the frontend directory')
-    
-    args = parser.parse_args()
-    
-    print(f"Backend path: {args.backend}")
-    print(f"Frontend path: {args.frontend}")
-    
-    # Parse backend routes
-    backend_routes = parse_backend_routes(args.backend)
-    
-    print(f"\nFound {len(backend_routes)} unique API routes in backend:")
-    for route in sorted(backend_routes):
-        print(f"  {route}")
-    
-    # Parse frontend API calls
-    frontend_calls = parse_frontend_calls(args.frontend)
-    
-    print(f"\nFound {len(frontend_calls)} API calls in frontend:")
-    for call in frontend_calls:
-        print(f"  {call['method']} {call['path']} (in {os.path.relpath(call['file'], args.frontend)})")
-    
-    # Find mismatches between backend routes and frontend API calls
-    unused_routes, undefined_routes = find_route_mismatches(backend_routes, frontend_calls)
-    
-    if unused_routes:
-        print(f"\nWARNING: Found {len(unused_routes)} backend routes not used in frontend:")
-        for route in sorted(unused_routes):
-            print(f"  {route}")
-    
-    if undefined_routes:
-        print(f"\nWARNING: Found {len(undefined_routes)} frontend API calls with no matching backend route:")
-        for route in sorted(undefined_routes):
-            print(f"  {route}")
-    
-    if not unused_routes and not undefined_routes:
-        print("\nSuccess! All backend routes are used in frontend and all frontend API calls have matching backend routes.")
-    
-    return 0
-
+# Example usage
 if __name__ == "__main__":
-    sys.exit(main())
+    import sys
+    
+    if len(sys.argv) != 2:
+        print("Usage: python parse_frontend_calls.py <frontend_directory>")
+        sys.exit(1)
+    
+    frontend_dir = sys.argv[1]
+    api_calls = parse_frontend_calls(frontend_dir)
+    
+    print(f"Found {len(api_calls)} API calls:")
+    for call in api_calls:
+        print(f"  {call['method']} {call['path']} (in {call['file']})")
