@@ -1,3 +1,6 @@
 # Route-Linter dependencies
-# No external dependencies required for basic functionality
 # Core functionality uses standard library modules only
+
+# Optional dependencies for enhanced functionality
+thefuzz>=0.19.0
+python-Levenshtein>=0.12.2  # For better performance with thefuzz

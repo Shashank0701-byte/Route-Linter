@@ -212,16 +212,20 @@ def find_route_mismatches(backend_routes, frontend_calls):
         frontend_calls (list): List of dictionaries with frontend API calls
         
     Returns:
-        tuple: (unused_routes, undefined_routes)
+        tuple: (unused_routes, undefined_routes, suggestions)
             - unused_routes: Backend routes not used in the frontend
             - undefined_routes: Frontend API calls with no matching backend route
+            - suggestions: Dictionary mapping undefined routes to suggested fixes
     """
     # Extract method and path from frontend calls
     frontend_routes = set()
+    frontend_route_to_call = {}
     for call in frontend_calls:
         # Normalize the path by removing template literals
         path = re.sub(r'\${[^}]*}', ':param', call['path'])
-        frontend_routes.add(f"{call['method']} {path}")
+        route_key = f"{call['method']} {path}"
+        frontend_routes.add(route_key)
+        frontend_route_to_call[route_key] = call
     
     # Find routes defined in backend but not used in frontend
     unused_routes = backend_routes - frontend_routes
@@ -229,12 +233,14 @@ def find_route_mismatches(backend_routes, frontend_calls):
     # Find routes used in frontend but not defined in backend
     undefined_routes = frontend_routes - backend_routes
     
-    return unused_routes, undefined_routes
+    return unused_routes, undefined_routes, frontend_route_to_call
 
 def main():
     parser = argparse.ArgumentParser(description='Route Linter - Analyze backend and frontend routes')
     parser.add_argument('--backend', required=True, help='Path to the backend directory')
     parser.add_argument('--frontend', required=True, help='Path to the frontend directory')
+    parser.add_argument('--suggest', action='store_true', help='Suggest fixes for undefined routes using fuzzy matching')
+    parser.add_argument('--threshold', type=int, default=70, help='Minimum similarity score for suggestions (0-100)')
     
     args = parser.parse_args()
     
@@ -256,7 +262,7 @@ def main():
         print(f"  {call['method']} {call['path']} (in {os.path.relpath(call['file'], args.frontend)})")
     
     # Find mismatches between backend routes and frontend API calls
-    unused_routes, undefined_routes = find_route_mismatches(backend_routes, frontend_calls)
+    unused_routes, undefined_routes, frontend_route_to_call = find_route_mismatches(backend_routes, frontend_calls)
     
     if unused_routes:
         print(f"\nWARNING: Found {len(unused_routes)} backend routes not used in frontend:")
@@ -265,8 +271,34 @@ def main():
     
     if undefined_routes:
         print(f"\nWARNING: Found {len(undefined_routes)} frontend API calls with no matching backend route:")
-        for route in sorted(undefined_routes):
-            print(f"  {route}")
+        
+        # If suggestion is enabled, use fuzzy matching to find potential fixes
+        if args.suggest:
+            try:
+                from thefuzz import process
+                
+                print("\nSuggested fixes (based on fuzzy matching):")
+                for route in sorted(undefined_routes):
+                    # Get the original call information
+                    call = frontend_route_to_call[route]
+                    file_path = os.path.relpath(call['file'], args.frontend)
+                    
+                    # Find the closest match from backend routes
+                    closest_match, score = process.extractOne(route, backend_routes)
+                    
+                    # Only suggest if the score is above the threshold
+                    if score >= args.threshold:
+                        print(f"  In {file_path}:")
+                        print(f"    {route} -> {closest_match} (similarity: {score}%)")
+                    else:
+                        print(f"  In {file_path}:")
+                        print(f"    {route} -> No good match found (best: {closest_match}, similarity: {score}%)")
+            except ImportError:
+                print("\nNote: Install 'thefuzz' package for route suggestions: pip install thefuzz python-Levenshtein")
+        else:
+            # Just list the undefined routes without suggestions
+            for route in sorted(undefined_routes):
+                print(f"  {route}")
     
     if not unused_routes and not undefined_routes:
         print("\nSuccess! All backend routes are used in frontend and all frontend API calls have matching backend routes.")
